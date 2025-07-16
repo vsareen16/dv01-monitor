@@ -41,3 +41,25 @@ if uploaded_file:
         ax.set_ylabel("% of Total DV01")
         ax.set_xticklabels(df["Tenor"], rotation=45)
         st.pyplot(fig)
+
+# --- Pull margin and capital from first row where it's not null
+margin_used = df["Margin Used (AUD)"].dropna().iloc[0] if df["Margin Used (AUD)"].notna().any() else None
+capital = df["Capital (AUD)"].dropna().iloc[0] if df["Capital (AUD)"].notna().any() else None
+
+# --- P&L Impact Calculations
+df["PnL_5bp (AUD)"] = df["DV01 (AUD/bp)"] * 5
+df["PnL_10bp (AUD)"] = df["DV01 (AUD/bp)"] * 10
+
+total_pnl_5bp = df["PnL_5bp (AUD)"].sum()
+total_pnl_10bp = df["PnL_10bp (AUD)"].sum()
+
+st.markdown(f"💰 **Total P&L Impact (5bp Move)**: AUD {total_pnl_5bp:,.0f}")
+st.markdown(f"💰 **Total P&L Impact (10bp Move)**: AUD {total_pnl_10bp:,.0f}")
+
+if margin_used:
+    st.markdown(f"📊 **5bp P&L as % of Margin**: {total_pnl_5bp / margin_used:.2%}")
+    st.markdown(f"📊 **10bp P&L as % of Margin**: {total_pnl_10bp / margin_used:.2%}")
+
+if capital:
+    st.markdown(f"📈 **5bp P&L as % of Capital**: {total_pnl_5bp / capital:.2%}")
+    st.markdown(f"📈 **10bp P&L as % of Capital**: {total_pnl_10bp / capital:.2%}")
