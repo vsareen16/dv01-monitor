@@ -52,8 +52,16 @@ if uploaded_file:
         pnl_5bp = total_dv01 * 5
         pnl_10bp = total_dv01 * 10
 
-        st.markdown(f"💰 **Total 5bp P&L**: AUD {pnl_5bp:,.0f}")
-        st.markdown(f"💰 **Total 10bp P&L**: AUD {pnl_10bp:,.0f}")
+        # Directional messaging
+        if pnl_5bp > 0:
+            st.markdown(f"💰 **Total 5bp P&L (yields ↑)**: AUD {pnl_5bp:,.0f} 🔻 **Loss**")
+        else:
+            st.markdown(f"💰 **Total 5bp P&L (yields ↑)**: AUD {pnl_5bp:,.0f} 🟢 **Gain**")
+
+        if pnl_10bp > 0:
+            st.markdown(f"💰 **Total 10bp P&L (yields ↑)**: AUD {pnl_10bp:,.0f} 🔻 **Loss**")
+        else:
+            st.markdown(f"💰 **Total 10bp P&L (yields ↑)**: AUD {pnl_10bp:,.0f} 🟢 **Gain**")
 
         if margin_used:
             st.markdown(f"📊 5bp P&L as % of Margin: {pnl_5bp / margin_used:.2%}")
@@ -79,11 +87,20 @@ if uploaded_file:
         firm_pnl_5bp = group_df["PnL_5bp"].sum()
         firm_pnl_10bp = group_df["PnL_10bp"].sum()
 
-        st.markdown(f"🧮 **Firm-wide 5bp P&L**: AUD {firm_pnl_5bp:,.0f}")
-        st.markdown(f"🧮 **Firm-wide 10bp P&L**: AUD {firm_pnl_10bp:,.0f}")
+        if firm_pnl_5bp > 0:
+            st.markdown(f"🧮 **Firm-wide 5bp P&L (yields ↑)**: AUD {firm_pnl_5bp:,.0f} 🔻 **Loss**")
+        else:
+            st.markdown(f"🧮 **Firm-wide 5bp P&L (yields ↑)**: AUD {firm_pnl_5bp:,.0f} 🟢 **Gain**")
+
+        if firm_pnl_10bp > 0:
+            st.markdown(f"🧮 **Firm-wide 10bp P&L (yields ↑)**: AUD {firm_pnl_10bp:,.0f} 🔻 **Loss**")
+        else:
+            st.markdown(f"🧮 **Firm-wide 10bp P&L (yields ↑)**: AUD {firm_pnl_10bp:,.0f} 🟢 **Gain**")
+
         if margin_used:
             st.markdown(f"📊 **5bp as % Margin**: {firm_pnl_5bp / margin_used:.2%}")
             st.markdown(f"📊 **10bp as % Margin**: {firm_pnl_10bp / margin_used:.2%}")
         if capital:
             st.markdown(f"📈 **5bp as % Capital**: {firm_pnl_5bp / capital:.2%}")
             st.markdown(f"📈 **10bp as % Capital**: {firm_pnl_10bp / capital:.2%}")
+
