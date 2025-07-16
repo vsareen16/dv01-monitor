@@ -1,11 +1,10 @@
-
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import matplotlib.pyplot as plt
+from datetime import datetime
 
-st.set_page_config(page_title="DV01 Risk Monitor", layout="wide")
-st.title("📊 DV01 Risk Monitoring Dashboard")
+st.set_page_config(page_title="DV01 & Risk Dashboard", layout="wide")
+st.title("📊 Firm-Level DV01 & Interest Rate Risk Dashboard")
 
 uploaded_file = st.file_uploader("Upload Excel Position File", type=["xlsx"])
 
@@ -13,53 +12,78 @@ if uploaded_file:
     xls = pd.ExcelFile(uploaded_file)
     sheet_names = xls.sheet_names
 
-    for sheet in sheet_names:
-        st.subheader(f"📁 Trader Sheet: {sheet}")
+    # Load firm-level margin and capital from "FirmSummary" sheet
+    margin_used = None
+    capital = None
+    if "FirmSummary" in sheet_names:
+        firm_df = pd.read_excel(xls, sheet_name="FirmSummary", index_col=0)
+        margin_used = firm_df.loc["Margin Used", "Value"]
+        capital = firm_df.loc["Capital", "Value"]
+        st.success(f"📦 Firm Margin: AUD {margin_used:,.0f} | 💰 Capital: AUD {capital:,.0f}")
+
+    # Prepare combined stats
+    combined_data = []
+
+    for sheet in [s for s in sheet_names if s != "FirmSummary"]:
+        st.subheader(f"📁 Trader: {sheet}")
         df = pd.read_excel(xls, sheet_name=sheet)
-        
+        df["Trader"] = sheet
+
         TICK_VALUE = 25
         DV01_LIMIT_PCT = 30
-        
+
         df["DV01 (AUD/bp)"] = df["Contracts"] * TICK_VALUE
         df["Abs DV01"] = df["DV01 (AUD/bp)"].abs()
-        total_dv01 = df["Abs DV01"].sum()
-        df["% of Total DV01"] = (df["Abs DV01"] / total_dv01) * 100
+        df["% of Total DV01"] = df["Abs DV01"] / df["Abs DV01"].sum() * 100
         df["Limit Breach (>30%)"] = df["% of Total DV01"] > DV01_LIMIT_PCT
         df["Timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M")
 
-        st.dataframe(df)
-
-        breaches = df[df["Limit Breach (>30%)"]]
-        if not breaches.empty:
-            st.warning("🚨 Limit breach detected:")
-            st.dataframe(breaches)
+        st.dataframe(df[["Tenor", "Contracts", "DV01 (AUD/bp)", "% of Total DV01", "Limit Breach (>30%)"]])
 
         fig, ax = plt.subplots()
-        bars = ax.bar(df["Tenor"], df["% of Total DV01"], color=df["Limit Breach (>30%)"].map({True: 'red', False: 'skyblue'}))
+        ax.bar(df["Tenor"], df["% of Total DV01"], color=df["Limit Breach (>30%)"].map({True: 'red', False: 'skyblue'}))
         ax.axhline(DV01_LIMIT_PCT, color='gray', linestyle='--')
-        ax.set_title(f"DV01 % by Tenor — {sheet}")
+        ax.set_title(f"DV01 Exposure % – {sheet}")
         ax.set_ylabel("% of Total DV01")
         ax.set_xticklabels(df["Tenor"], rotation=45)
         st.pyplot(fig)
 
-# --- Pull margin and capital from first row where it's not null
-margin_used = df["Margin Used (AUD)"].dropna().iloc[0] if df["Margin Used (AUD)"].notna().any() else None
-capital = df["Capital (AUD)"].dropna().iloc[0] if df["Capital (AUD)"].notna().any() else None
+        total_dv01 = df["DV01 (AUD/bp)"].sum()
+        pnl_5bp = total_dv01 * 5
+        pnl_10bp = total_dv01 * 10
 
-# --- P&L Impact Calculations
-df["PnL_5bp (AUD)"] = df["DV01 (AUD/bp)"] * 5
-df["PnL_10bp (AUD)"] = df["DV01 (AUD/bp)"] * 10
+        st.markdown(f"💰 **Total 5bp P&L**: AUD {pnl_5bp:,.0f}")
+        st.markdown(f"💰 **Total 10bp P&L**: AUD {pnl_10bp:,.0f}")
 
-total_pnl_5bp = df["PnL_5bp (AUD)"].sum()
-total_pnl_10bp = df["PnL_10bp (AUD)"].sum()
+        if margin_used:
+            st.markdown(f"📊 5bp P&L as % of Margin: {pnl_5bp / margin_used:.2%}")
+            st.markdown(f"📊 10bp P&L as % of Margin: {pnl_10bp / margin_used:.2%}")
+        if capital:
+            st.markdown(f"📈 5bp P&L as % of Capital: {pnl_5bp / capital:.2%}")
+            st.markdown(f"📈 10bp P&L as % of Capital: {pnl_10bp / capital:.2%}")
 
-st.markdown(f"💰 **Total P&L Impact (5bp Move)**: AUD {total_pnl_5bp:,.0f}")
-st.markdown(f"💰 **Total P&L Impact (10bp Move)**: AUD {total_pnl_10bp:,.0f}")
+        combined_data.append({
+            "Trader": sheet,
+            "DV01": total_dv01,
+            "PnL_5bp": pnl_5bp,
+            "PnL_10bp": pnl_10bp
+        })
 
-if margin_used:
-    st.markdown(f"📊 **5bp P&L as % of Margin**: {total_pnl_5bp / margin_used:.2%}")
-    st.markdown(f"📊 **10bp P&L as % of Margin**: {total_pnl_10bp / margin_used:.2%}")
+    # Group Summary
+    if combined_data:
+        st.subheader("📊 Group-Level Summary")
+        group_df = pd.DataFrame(combined_data)
+        st.dataframe(group_df)
 
-if capital:
-    st.markdown(f"📈 **5bp P&L as % of Capital**: {total_pnl_5bp / capital:.2%}")
-    st.markdown(f"📈 **10bp P&L as % of Capital**: {total_pnl_10bp / capital:.2%}")
+        total_firm_dv01 = group_df["DV01"].sum()
+        firm_pnl_5bp = group_df["PnL_5bp"].sum()
+        firm_pnl_10bp = group_df["PnL_10bp"].sum()
+
+        st.markdown(f"🧮 **Firm-wide 5bp P&L**: AUD {firm_pnl_5bp:,.0f}")
+        st.markdown(f"🧮 **Firm-wide 10bp P&L**: AUD {firm_pnl_10bp:,.0f}")
+        if margin_used:
+            st.markdown(f"📊 **5bp as % Margin**: {firm_pnl_5bp / margin_used:.2%}")
+            st.markdown(f"📊 **10bp as % Margin**: {firm_pnl_10bp / margin_used:.2%}")
+        if capital:
+            st.markdown(f"📈 **5bp as % Capital**: {firm_pnl_5bp / capital:.2%}")
+            st.markdown(f"📈 **10bp as % Capital**: {firm_pnl_10bp / capital:.2%}")
