@@ -21,6 +21,16 @@ if uploaded_file:
         capital = firm_df.loc["Capital", "Value"]
         st.success(f"📦 Firm Margin: AUD {margin_used:,.0f} | 💰 Capital: AUD {capital:,.0f}")
 
+    # Scenario stress table input (Tenor → Shift in bps)
+    st.subheader("🔁 Curve Shift Scenario Input")
+    scenario_shifts = {}
+    all_tenors = set()
+    for sheet in [s for s in sheet_names if s != "FirmSummary"]:
+        df = pd.read_excel(xls, sheet_name=sheet)
+        all_tenors.update(df["Tenor"].unique())
+    all_tenors = sorted(list(all_tenors))
+    shift_input = {tenor: st.number_input(f"Shift (bp) for {tenor}", value=0, step=1) for tenor in all_tenors}
+
     # Prepare combined stats
     combined_data = []
 
@@ -52,6 +62,11 @@ if uploaded_file:
         pnl_5bp = total_dv01 * 5
         pnl_10bp = total_dv01 * 10
 
+        # Scenario stress calc
+        df["Shift_bps"] = df["Tenor"].map(shift_input)
+        df["Stress_PnL"] = df["DV01 (AUD/bp)"] * df["Shift_bps"]
+        stress_pnl = df["Stress_PnL"].sum()
+
         # Directional messaging
         if pnl_5bp > 0:
             st.markdown(f"💰 **Total 5bp P&L (yields ↑)**: AUD {pnl_5bp:,.0f} 🔻 **Loss**")
@@ -63,18 +78,26 @@ if uploaded_file:
         else:
             st.markdown(f"💰 **Total 10bp P&L (yields ↑)**: AUD {pnl_10bp:,.0f} 🟢 **Gain**")
 
+        if stress_pnl > 0:
+            st.markdown(f"🚨 **Scenario Stress P&L**: AUD {stress_pnl:,.0f} 🔻 **Loss**")
+        else:
+            st.markdown(f"🚨 **Scenario Stress P&L**: AUD {stress_pnl:,.0f} 🟢 **Gain**")
+
         if margin_used:
             st.markdown(f"📊 5bp P&L as % of Margin: {pnl_5bp / margin_used:.2%}")
             st.markdown(f"📊 10bp P&L as % of Margin: {pnl_10bp / margin_used:.2%}")
+            st.markdown(f"📊 Stress P&L as % of Margin: {stress_pnl / margin_used:.2%}")
         if capital:
             st.markdown(f"📈 5bp P&L as % of Capital: {pnl_5bp / capital:.2%}")
             st.markdown(f"📈 10bp P&L as % of Capital: {pnl_10bp / capital:.2%}")
+            st.markdown(f"📈 Stress P&L as % of Capital: {stress_pnl / capital:.2%}")
 
         combined_data.append({
             "Trader": sheet,
             "DV01": total_dv01,
             "PnL_5bp": pnl_5bp,
-            "PnL_10bp": pnl_10bp
+            "PnL_10bp": pnl_10bp,
+            "Stress_PnL": stress_pnl
         })
 
     # Group Summary
@@ -86,6 +109,7 @@ if uploaded_file:
         total_firm_dv01 = group_df["DV01"].sum()
         firm_pnl_5bp = group_df["PnL_5bp"].sum()
         firm_pnl_10bp = group_df["PnL_10bp"].sum()
+        firm_stress_pnl = group_df["Stress_PnL"].sum()
 
         if firm_pnl_5bp > 0:
             st.markdown(f"🧮 **Firm-wide 5bp P&L (yields ↑)**: AUD {firm_pnl_5bp:,.0f} 🔻 **Loss**")
@@ -97,10 +121,12 @@ if uploaded_file:
         else:
             st.markdown(f"🧮 **Firm-wide 10bp P&L (yields ↑)**: AUD {firm_pnl_10bp:,.0f} 🟢 **Gain**")
 
-        if margin_used:
-            st.markdown(f"📊 **5bp as % Margin**: {firm_pnl_5bp / margin_used:.2%}")
-            st.markdown(f"📊 **10bp as % Margin**: {firm_pnl_10bp / margin_used:.2%}")
-        if capital:
-            st.markdown(f"📈 **5bp as % Capital**: {firm_pnl_5bp / capital:.2%}")
-            st.markdown(f"📈 **10bp as % Capital**: {firm_pnl_10bp / capital:.2%}")
+        if firm_stress_pnl > 0:
+            st.markdown(f"⚠️ **Firm-wide Scenario Stress P&L**: AUD {firm_stress_pnl:,.0f} 🔻 **Loss**")
+        else:
+            st.markdown(f"⚠️ **Firm-wide Scenario Stress P&L**: AUD {firm_stress_pnl:,.0f} 🟢 **Gain**")
 
+        if margin_used:
+            st.markdown(f"📊 **Stress P&L as % Margin**: {firm_stress_pnl / margin_used:.2%}")
+        if capital:
+            st.markdown(f"📈 **Stress P&L as % Capital**: {firm_stress_pnl / capital:.2%}")
